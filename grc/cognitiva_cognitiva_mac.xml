@@ -1,0 +1,189 @@
+<block>
+  <name>Cognitiva MAC</name>
+  <key>cognitiva_cognitiva_mac</key>
+  <category>gr-cognitiva</category>
+  <import>import cognitiva</import>
+  <make>cognitiva.cognitiva_mac(
+  $mac_address_, 
+  $cca_mode_,
+  $use_arq_, 
+  $mac_ver_, 
+  $max_attempts_, 
+  $timeout_, 
+  $broadcast_interval_, 
+  $exp_backoff_, 
+  $backoff_randmoness_, 
+  $node_expiry_delay_, 
+  $expire_on_arq_failure_, 
+  $only_send_if_alive_, 
+  $debug_mask_)
+  </make>
+        <param>
+	      <name>MAC Address</name>
+	      <key>mac_address_</key>
+	      <value>"::1"</value>
+	      <type>string</type>
+	</param>
+	<param>
+		<name>CCA Mode</name>
+		<key>cca_mode_</key>
+		<value>3</value>
+		<type>enum</type>
+		<hide>part</hide>
+		<option>
+			<name>ALOHA</name>
+			<key>0</key>
+		</option>
+		<option>
+			<name>Energy Detection</name>
+			<key>1</key>
+		</option>
+		<option>
+			<name>Carrier Sensing</name>
+			<key>2</key>
+		</option>
+		<option>
+			<name>Energy Detection and Carrier Sensing</name>
+			<key>3</key>
+		</option>		
+	</param>
+	<param>
+              <name>MAC Version</name>
+              <key>mac_ver_</key>
+              <value>0</value>
+              <type>int</type>
+	      <hide>part</hide>
+	</param>
+	<param>
+		<name>Use ARQ</name>
+		<key>use_arq_</key>
+		<value>True</value>
+		<type>enum</type>
+		<option>
+			<name>Yes</name>
+			<key>True</key>
+		</option>
+		<option>
+			<name>No</name>
+			<key>False</key>
+		</option>
+	</param>	
+	<param>
+              <name>Max Attempts</name>
+              <key>max_attempts_</key>
+              <value>10</value>
+              <type>int</type>
+	      <hide>part</hide>
+	</param>
+	<param>
+              <name>Timeout</name>
+              <key>timeout_</key>
+              <value>0.1</value>
+              <type>real</type>
+	      <hide>part</hide>
+	</param>
+	<param>
+              <name>Broadcast Interval</name>
+              <key>broadcast_interval_</key>
+              <value>2.0</value>
+              <type>real</type>
+	      <hide>part</hide>
+	</param>
+	<param>
+              <name>Backoff Type</name>
+              <key>exp_backoff_</key>
+              <value>True</value>
+	      <type>enum</type>
+	      <hide>part</hide>
+	      <option>
+		      <name>Exponential</name>
+		      <key>True</key>
+	      </option>
+	      <option>
+		      <name>Linear</name>
+		      <key>False</key>
+	      </option>	      
+	</param>
+	<param>
+              <name>Backoff Randomness</name>
+	      <key>backoff_randmoness_</key>    	           
+              <value>0.05</value>
+              <type>real</type>
+	      <hide>part</hide>
+	</param>
+	<param>
+              <name>Node Expiry Timeout</name>
+              <key>node_expiry_delay_</key>
+              <value>10.0</value>
+              <type>real</type>
+	      <hide>part</hide>
+	</param>
+	<param>
+              <name>Expire Node on Failure</name>
+              <key>expire_on_arq_failure_</key>
+	      <value>False</value>
+              <type>enum</type>
+	      <hide>part</hide>
+	      <option>
+		      <name>True</name>
+		      <key>True</key>
+	      </option>
+	      <option>
+		      <name>False</name>
+		      <key>False</key>
+	      </option>	      
+	</param>
+	<param>
+              <name>Only Send if Alive</name>
+              <key>only_send_if_alive_</key>
+	      <value>False</value>
+	      <type>enum</type>
+	      <hide>part</hide>
+	      <option>
+		      <name>True</name>
+		      <key>True</key>
+	      </option>
+	      <option>
+		      <name>False</name>
+		      <key>False</key>
+	      </option>	      
+	</param>	
+	<param>
+	      <name>Debug Mask</name>
+	      <key>debug_mask_</key>
+	      <value>0</value>
+	      <type>int</type>
+	      <hide>part</hide>
+	</param>
+	
+	<sink>
+		<name>payload_in</name>
+		<type>message</type>
+		<optional>True</optional>
+	</sink>
+	<sink>
+		<name>mpdu_in</name>
+		<type>message</type>
+		<optional>True</optional>
+	</sink>
+	<sink>
+		<name>control_in</name>
+		<type>message</type>
+		<optional>True</optional>
+	</sink>
+	<source>
+		<name>payload_out</name>
+		<type>message</type>
+		<optional>True</optional>
+	</source>
+	<source>
+		<name>mpdu_out</name>
+		<type>message</type>
+		<optional>True</optional>
+	</source>
+	<source>
+		<name>control_out</name>
+		<type>message</type>
+		<optional>True</optional>
+	</source>
+</block>

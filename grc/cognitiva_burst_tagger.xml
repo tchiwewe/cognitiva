@@ -1,0 +1,49 @@
+<?xml version="1.0"?>
+<block>
+  <name>Burst Tagger</name>
+  <key>cognitiva_burst_tagger</key>
+  <category>gr-cognitiva</category>
+  <import>import pmt</import>
+  <import>import cognitiva</import>
+  <make>cognitiva.burst_tagger($tag_name, $mult)</make>
+  <!-- Make one 'param' node for every Parameter you want settable from the GUI.
+       Sub-nodes:
+       * name
+       * key (makes the value accessible as $keyname, e.g. in the make node)
+       * type -->
+  <param>
+    <name>Tag Name</name>
+    <key>tag_name</key>
+    <value>pmt.intern("burst_len")</value>
+    <type>raw</type>
+  </param>
+
+  <param>
+    <name>Multiplier</name>
+    <key>mult</key>
+    <value>1</value>
+    <type>int</type>
+  </param>
+  
+  <check>$mult > 0</check>
+
+  <!-- Make one 'sink' node per input. Sub-nodes:
+       * name (an identifier for the GUI)
+       * type
+       * vlen
+       * optional (set to 1 for optional inputs) -->
+  <sink>
+    <name>in</name>
+    <type>complex</type>
+  </sink>
+
+  <!-- Make one 'source' node per output. Sub-nodes:
+       * name (an identifier for the GUI)
+       * type
+       * vlen
+       * optional (set to 1 for optional inputs) -->
+   <source>
+    <name>out</name>
+    <type>complex</type>
+  </source>
+</block>

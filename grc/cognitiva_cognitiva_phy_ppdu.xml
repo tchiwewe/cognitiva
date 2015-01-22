@@ -1,0 +1,40 @@
+<!-- <?xml version="1.0"?> -->
+<block>
+  <name>PHY PPDU</name>
+  <key>cognitiva_cognitiva_phy_ppdu</key>
+  <category>gr-cognitiva</category>
+  <import>import cognitiva</import>
+  <make>cognitiva.cognitiva_phy_ppdu($debug_mask)</make>
+  <!-- Make one 'param' node for every Parameter you want settable from the GUI.
+       Sub-nodes:
+       * name
+       * key (makes the value accessible as $keyname, e.g. in the make node)
+       * type -->
+<!--  <param>
+    <name>...</name>
+    <key>...</key>
+    <type>...</type>
+</param> -->
+  <param>
+    <name>Debug Mask</name>
+    <key>debug_mask</key>
+    <value>0</value>
+    <type>int</type>
+  </param>
+  <!-- Make one 'sink' node per input. Sub-nodes:
+       * name (an identifier for the GUI)
+       * type
+       * vlen
+       * optional (set to 1 for optional inputs) -->
+  <sink>
+    <name>in</name>
+    <type>message</type>
+    <optional>True</optional>
+</sink>
+
+  <source>
+    <name>out</name>
+    <type>message</type>
+    <optional>True</optional>
+  </source>
+</block>

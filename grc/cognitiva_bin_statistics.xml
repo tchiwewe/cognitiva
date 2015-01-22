@@ -1,0 +1,67 @@
+<?xml version="1.0"?>
+<block>
+  <name>Bin Statistics</name>
+  <key>cognitiva_bin_statistics</key>
+  <category>gr-cognitiva</category>
+  <import>import cognitiva</import>
+  <make>cognitiva.bin_statistics($vlen_, $tune_delay, $dwell_delay, $sample_rate, $debug_mask)</make>
+  
+  <param>
+    <name>FFT Size</name>
+    <key>vlen_</key>
+    <value>1024</value>
+    <type>int</type>    
+  </param>
+  <param>
+    <name>Tune Delay</name>
+    <key>tune_delay</key>
+    <value>0.1</value>
+    <type>real</type>
+  </param>  
+  <param>
+    <name>Dwell Delay</name>
+    <key>dwell_delay</key>
+    <value>0.2</value>
+    <type>real</type>    
+  </param>
+  <param>
+    <name>Sample Rate</name>
+    <key>sample_rate</key>
+    <value>samp_rate</value>
+    <type>real</type>
+  </param>  
+  <param>
+    <name>Debug Mask</name>
+    <key>debug_mask</key>
+    <value>0</value>
+    <type>int</type>
+  </param>
+  
+  <sink>
+    <name>command_in</name>
+    <type>message</type>
+    <optional>True</optional>
+  </sink>
+  <sink>
+    <name>in</name>
+    <type>float</type>
+    <vlen>$vlen_</vlen>
+  </sink>
+  
+  <source>
+    <name>cca_ed</name>
+    <type>message</type>
+    <optional>True</optional>
+  </source>
+  <source>
+    <name>bins</name>
+    <type>message</type>
+    <optional>True</optional>
+  </source>
+   <source>
+    <name>command_out</name>
+    <type>message</type>
+    <optional>True</optional>
+  </source>
+  
+</block>
