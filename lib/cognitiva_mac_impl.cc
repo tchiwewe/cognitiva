@@ -24,6 +24,7 @@
 
 #include <gnuradio/io_signature.h>
 #include "cognitiva_mac_impl.h"
+#include "debug_utils.h"
 #include <gnuradio/digital/crc32.h>
 
 // Handle IPv4 and IPv6 addresses
@@ -114,10 +115,25 @@ cognitiva_mac_impl::cognitiva_mac_impl(const char *mac_address_,
 	broadcast_address = MacAddress("::");
 
 	// ARQ
-	if(d_debug_level & 2)
+	arq_pkts_txed = 0;
+	arq_retxed = 0;
+	failed_arq = 0;
+	succeeded_arq = 0;
+	total_arq = 0;
+	arq_channel_state = ARQ_CHANNEL_IDLE;
+	expected_arq_id = 0;	
+	next_random_backoff_percentage = 0.0;	
+	
+	// CCA
+	cca_channel_state = CCA_CHANNEL_IDLE;
+	cca_ed_threshold = -90; //**
+	csma_tx_state = TX_INIT;
+	timeout_difs = (MAX_MAC_PAYLOAD_LEN + PPDU_OVERHEAD + MPDU_OVERHEAD) * 8 / 250e3;
+		
+	if (d_debug_level & DEBUG_INFO)
 	{
-		std::cout << "CCA mode: " << d_cca_mode << std::endl;
-		std::cout << "use ARQ: " << use_arq << std::endl;
+		std::cout << "cca_mode: " << d_cca_mode << std::endl;
+		std::cout << "use_arq: " << use_arq << std::endl;
 		std::cout << "max_attempts: " << max_attempts << std::endl;
 		std::cout << "timeout: " << timeout << std::endl;
 		std::cout << "broadcast_interval: " << broadcast_interval << std::endl;
@@ -126,20 +142,8 @@ cognitiva_mac_impl::cognitiva_mac_impl(const char *mac_address_,
 		std::cout << "node_expiry_delay: " << node_expiry_delay << std::endl;
 		std::cout << "expire_on_arq_failure: " << expire_on_arq_failure << std::endl;
 		std::cout << "only_send_if_alive: " << only_send_if_alive << std::endl;
+		std::cout << "timeout_difs: " << timeout_difs << std::endl;
 	}	
-	arq_pkts_txed = 0;
-	arq_retxed = 0;
-	failed_arq = 0;
-	arq_channel_state = ARQ_CHANNEL_IDLE;
-	expected_arq_id = 0;	
-	next_random_backoff_percentage = 0.0;	
-
-	// CCA
-	cca_channel_state = CCA_CHANNEL_IDLE;
-	cca_ed_threshold = -90; //**
-	csma_tx_state = TX_INIT;
-	timeout_difs = (MAX_MAC_PAYLOAD_LEN + PPDU_OVERHEAD + MPDU_OVERHEAD)*8 / 250e3;
-	std::cout << "***timeout_difs: " << timeout_difs << std::endl; //**
 	
 	//gettimeofday(&last_tx_time, NULL);	
 	last_tx_time = (struct timeval){0};
@@ -159,7 +163,7 @@ cognitiva_mac_impl::cognitiva_mac_impl(const char *mac_address_,
 		pmt::mp("spectrum_sense"),
 		pmt::mp("continue"));
 		message_port_pub(pmt::mp("control_out"), command);		
-		if (d_debug_level & 2)				
+		if (d_debug_level & DEBUG_INFO)				
 			std::cout << "Sent SS continue command" << std::endl;
 	}*/
 }
@@ -286,10 +290,10 @@ void cognitiva_mac_impl::make_mpdu(pmt::pmt_t msg) {
 		return;
 	}
 
-	if (d_debug_level)
+	if (d_debug_level & DEBUG_INFO)
 		std::cout << "\nMAC: received new message" << std::endl;
 
-	if (d_debug_level & 1) {
+	if (d_debug_level & DEBUG_VERBOSE) {
 		std::cout << "message length " << pmt::blob_length(blob) << std::endl;
 	}
 
@@ -318,7 +322,7 @@ void cognitiva_mac_impl::make_mpdu(pmt::pmt_t msg) {
 					{
 						if (!node_list.count(MacAddress(mac_frame.dest_address)))
 						{
-							if (d_debug_level & 1 )
+							if (d_debug_level & DEBUG_INFO)
 								std::cout << "Not sending packet to " << MacAddress::tobytestring(mac_frame.dest_address) << ", " << MacAddress::tostring(mac_frame.dest_address) << " as it hasn't been seen yet\n";
 							frame_ok = false;							
 						}
@@ -326,13 +330,13 @@ void cognitiva_mac_impl::make_mpdu(pmt::pmt_t msg) {
 						{
 							if (!node_list[MacAddress(mac_frame.dest_address)].alive)
 							{
-								if (d_debug_level & 1 )
+								if (d_debug_level & DEBUG_INFO )
 									std::cout << "Not sending packet to " << MacAddress::tobytestring(mac_frame.dest_address) << ", " << MacAddress::tostring(mac_frame.dest_address) << " as it isn't communicating\n";
 								frame_ok = false;
 							}
 							else
 							{
-								if (d_debug_level & 2 )
+								if (d_debug_level & DEBUG_INFO )
 									std::cout << "Sending packet to known communicating node" << "\n";
 							}
 						}
@@ -346,9 +350,14 @@ void cognitiva_mac_impl::make_mpdu(pmt::pmt_t msg) {
 				      m_seq_count--;
 			}
 		}
+		else
+		{
+			 if (d_debug_level & DEBUG_INFO)
+				std::cout << "No neighbour nodes ***" << std::endl;
+		 }
 	}
 	
-	if (d_debug_level & 1)
+	if (d_debug_level & DEBUG_VERBOSE)
 		std::cout << "queue length: " << msg_queue.size() << std::endl;
 }
 
@@ -472,7 +481,7 @@ void cognitiva_mac_impl::read_mpdu(pmt::pmt_t msg) {
 		return;
 	}
 
-	if (d_debug_level)
+	if (d_debug_level & DEBUG_INFO)
 		std::cout << "\nReceived MPDU, length: " << data_len << std::endl;
 
 	const uint8_t* buf = (const uint8_t*) pmt::blob_data(blob);
@@ -526,7 +535,7 @@ void cognitiva_mac_impl::read_cca(pmt::pmt_t msg)
 {
 	gr::thread::scoped_lock guard(d_mutex);
 	
-	if (d_debug_level & 2)
+	if (d_debug_level & DEBUG_INFO)
 		std::cout << "Got CCA message:" << pmt::length(msg) <<std::endl;
 
 	if ((pmt::length(msg) == 3) && pmt::is_tuple(msg))
@@ -535,7 +544,7 @@ void cognitiva_mac_impl::read_cca(pmt::pmt_t msg)
 		pmt::pmt_t msg_param2 = pmt::tuple_ref(msg, 1);
 		pmt::pmt_t msg_param3 = pmt::tuple_ref(msg, 2);
 
-		if (d_debug_level & 2)
+		if (d_debug_level & DEBUG_VERBOSE)
 		{	
 			std::cout << "Msg param 1: " << msg_param1 << std::endl;
 			std::cout << "Msg param 2: " << msg_param2 << std::endl;
@@ -544,11 +553,11 @@ void cognitiva_mac_impl::read_cca(pmt::pmt_t msg)
 		
 		if (pmt::symbol_to_string(msg_param1) == "cca")
 		{
-			if (d_debug_level & 2)	
+			if (d_debug_level & DEBUG_VERBOSE)	
 				std::cout << "CCA message param 1 correct" << std::endl;
 			if (pmt::symbol_to_string(msg_param2) == "ed")
 			{
-				if (d_debug_level & 2)	
+				if (d_debug_level & DEBUG_INFO)	
 					std::cout << "Got CCA ED message" << std::endl;
 
 				if ((d_cca_mode == MODE_ED) || (d_cca_mode == MODE_ED_CS))
@@ -557,7 +566,7 @@ void cognitiva_mac_impl::read_cca(pmt::pmt_t msg)
 					{
 						double pow_avg = pmt::to_double(msg_param3);
 						
-						if (d_debug_level & 1)	
+						if (d_debug_level & DEBUG_PERFORMANCE)	
 							std::cout << "CCA ED avg pow, threshold: " << pow_avg <<  ", " << cca_ed_threshold << std::endl;
 					
 						if (pow_avg > cca_ed_threshold)
@@ -568,8 +577,25 @@ void cognitiva_mac_impl::read_cca(pmt::pmt_t msg)
 								gettimeofday(&time_cca_busy, NULL);
 								
 								timeout_cca_busy = timeout_difs * (1.0 + 0.5 * (double) (rand() % 1000) / 1000.0); // at most another 50% of DIFS 
-								std::cout << "***** timeout_cca_busy: " << timeout_cca_busy << std::endl; //**
+								if (d_debug_level & DEBUG_PERFORMANCE)	
+									std::cout << "Set CCA timeout: " << timeout_cca_busy << std::endl; //**
 							}
+							else
+							{
+								if (d_debug_level & DEBUG_PERFORMANCE)	
+								{
+									struct timeval now;
+									gettimeofday(&now, NULL);
+
+									float cca_elapsed = (now.tv_sec + (now.tv_usec / 1000000.0)) - (time_cca_busy.tv_sec + (time_cca_busy.tv_usec / 1000000.0));
+									std::cout << "Elapsed CCA time : " << cca_elapsed << " of " << timeout_cca_busy << std::endl; //**
+								}
+							}
+						}
+						else
+						{
+							if (d_debug_level & DEBUG_PERFORMANCE)	
+								std::cout << "CCA ED avg pow below threshold"<< std::endl;
 						}
 					}
 					else
@@ -582,13 +608,13 @@ void cognitiva_mac_impl::read_cca(pmt::pmt_t msg)
 					pmt::mp("spectrum_sense"),
 					pmt::mp("continue"));
 					message_port_pub(pmt::mp("control_out"), command);		
-					if (d_debug_level & 2)				
+					if (d_debug_level & DEBUG_INFO)	
 						std::cout << "Sent SS continue command" << std::endl;
 				}
 			}
 			else if (pmt::symbol_to_string(msg_param2) == "cs")
 			{
-				if (d_debug_level & 2)	
+				if (d_debug_level & DEBUG_INFO)	
 					std::cout << "Got CCA CS message" << std::endl;
 					
 				if ((d_cca_mode == MODE_CS) || (d_cca_mode == MODE_ED_CS))
@@ -599,14 +625,27 @@ void cognitiva_mac_impl::read_cca(pmt::pmt_t msg)
 						gettimeofday(&time_cca_busy, NULL);
 						
 						timeout_cca_busy = timeout_difs * (1.0 + 0.5 * (double) (rand() % 1000) / 1000.0); // at most another 50% of DIFS
-						std::cout << "*** timeout_cca_busy: " << timeout_cca_busy << std::endl; //**
+						if (d_debug_level & DEBUG_PERFORMANCE)	
+							std::cout << "Set CCA timeout: " << timeout_cca_busy << std::endl; //**
 					}
+					else
+					{
+						if (d_debug_level & DEBUG_PERFORMANCE)	
+						{
+							struct timeval now;
+							gettimeofday(&now, NULL);
+
+							float cca_elapsed = (now.tv_sec + (now.tv_usec / 1000000.0)) - (time_cca_busy.tv_sec + (time_cca_busy.tv_usec / 1000000.0));
+							std::cout << "Elapsed CCA time : " << cca_elapsed << " of " << timeout_cca_busy << std::endl; //**
+						}
+					}
+					
 				}
 			}
 		}
 		else if (pmt::symbol_to_string(msg_param1) == "freq")
 		{
-			// if (d_debug_level & 2)	
+			// if (d_debug_level & DEBUG_INFO)	
 				//std::cout << "*** Got spectrum sensing message" << std::endl;
 		}
 	}
@@ -668,27 +707,28 @@ void cognitiva_mac_impl::perform_message_arq(mpdu_struct mac_frame)
 	if (arq_channel_state == ARQ_CHANNEL_IDLE) {
 		expected_arq_id = ((mac_frame.seq_nr[0] & 0xFF)
 				| ((mac_frame.seq_nr[1] << 8)));
-		send_mpdu_from_queue();
-		arq_channel_state = ARQ_CHANNEL_BUSY;
 		gettimeofday(&time_of_tx, NULL);
+		send_mpdu_from_queue();
+		arq_channel_state = ARQ_CHANNEL_BUSY;		
 		arq_pkts_txed++;
+		total_arq++;
 		retries = 0;
 		next_random_backoff_percentage = backoff_randomness
 				* (double) (rand() % 1000) / 1000.0;
 	} else {
 		if (exp_backoff == ARQ_BACKOFF_EXPONENTIAL) {
 			backedoff_timeout = timeout * pow(2, retries);
-			if (d_debug_level & 2)
+			if (d_debug_level & DEBUG_INFO)
 				std::cout << "*** timeout: " << backedoff_timeout
 				<< std::endl;
 		} else {
 			backedoff_timeout = timeout * (retries + 1);
-			if (d_debug_level & 2)
+			if (d_debug_level & DEBUG_INFO)
 				std::cout << "*** timeout: " << backedoff_timeout
 				<< std::endl;
 		}
 		backedoff_timeout *= (1.0 + next_random_backoff_percentage);
-		if (d_debug_level & 2)
+		if (d_debug_level & DEBUG_INFO)
 			std::cout << ">>> timeout: " << backedoff_timeout << std::endl;
 
 		struct timeval now;
@@ -696,12 +736,12 @@ void cognitiva_mac_impl::perform_message_arq(mpdu_struct mac_frame)
 
 		// Check elapsed time
 		if ( (now.tv_sec + (now.tv_usec / 1000000.0)) - (time_of_tx.tv_sec
-				+ (time_of_tx.tv_usec / 1000000.0)) > backedoff_timeout) {
-			if (retries == max_attempts) {
+				+ (time_of_tx.tv_usec / 1000000.0)) > backedoff_timeout) { // ARQ timeout reached
+			if (retries == max_attempts) { // Maximum attempts made, packet failed
 				mpdu_struct mac_frame = msg_queue.front();
 				MacAddress addr = MacAddress(mac_frame.dest_address);
 
-				if (d_debug_level & 1)
+				if (d_debug_level & DEBUG_VERBOSE)
 					std::cout << "Destination address "
 					<< node_list[addr].id.tobytestring() << ", "
 					<< node_list[addr].id.tostring()
@@ -712,7 +752,7 @@ void cognitiva_mac_impl::perform_message_arq(mpdu_struct mac_frame)
 				failed_arq++;
 				if (expire_on_arq_failure) {
 					node_list[addr].expire();
-					if (d_debug_level & 1)
+					if (d_debug_level & DEBUG_VERBOSE)
 						std::cout << "Expired node "
 						<< node_list[addr].id.tobytestring() << ", "
 						<< node_list[addr].id.tostring()
@@ -721,11 +761,13 @@ void cognitiva_mac_impl::perform_message_arq(mpdu_struct mac_frame)
 
 				// remove unacknowledged message from the message queue
 				msg_queue.pop_front();
-			} else {
+				
+				print_arq_stats();
+			} else { // Resend the packet
 				mpdu_struct mac_frame = msg_queue.front();
 				MacAddress addr = MacAddress(mac_frame.dest_address);
 
-				if (d_debug_level & 1)
+				if (d_debug_level & DEBUG_VERBOSE)
 					std::cout << "Destination address "
 					<< node_list[addr].id.tobytestring() << ", "
 					<< node_list[addr].id.tostring()
@@ -736,21 +778,28 @@ void cognitiva_mac_impl::perform_message_arq(mpdu_struct mac_frame)
 					<< "s, retrying\n";
 
 				retries++;
-				send_mpdu_from_queue();
 				gettimeofday(&time_of_tx, NULL);
+				send_mpdu_from_queue();				
 				next_random_backoff_percentage = backoff_randomness
 						* (double) (rand() % 1000) / 1000.0;
 				arq_retxed++;
+				total_arq++;
+				
+				print_arq_stats();
 			}
 		}
+		else // ARQ timer not yet timed out, continue waiting before attempting to transmit again
+		{
+		}
 	}	
+	
 }
 
 /* 
  * Process a MAC frame received from PHY layer
  */
 void cognitiva_mac_impl::process_mac_frame(mpdu_struct mac_frame) {
-	if (d_debug_level & 2)
+	if (d_debug_level & DEBUG_INFO)
 		print_mac_frame(mac_frame);
 
 	uint16_t received_seq_nr = ((mac_frame.seq_nr[0] & 0xFF)
@@ -761,15 +810,15 @@ void cognitiva_mac_impl::process_mac_frame(mpdu_struct mac_frame) {
 		MacAddress mac_src = MacAddress(mac_frame.src_address);
 		Node node = Node(mac_src);
 
-		if (d_debug_level & 2)
+		if (d_debug_level & DEBUG_INFO)
 			std::cout << "Received packet from other node\n";
 
 		if (node_list.count(mac_src)) {
-			if (d_debug_level & 1)
+			if (d_debug_level & DEBUG_INFO)
 				std::cout << "Received packet from known node\n";
 			node = node_list[mac_src];
 		} else {
-			if (d_debug_level & 1)
+			if (d_debug_level & DEBUG_VERBOSE)
 				std::cout << "Received packet from previously unknown node\n";
 			//node = Node(mac_src);
 			node_list[mac_src] = node;
@@ -778,7 +827,7 @@ void cognitiva_mac_impl::process_mac_frame(mpdu_struct mac_frame) {
 		struct timeval now;
 		gettimeofday(&now, NULL);
 		if (node_list[mac_src].update(now)) {
-			if (d_debug_level & 1)
+			if (d_debug_level & DEBUG_VERBOSE)
 				std::cout << "Node " << node.id.tobytestring() << ", "
 				<< node.id.tostring() << " alive\n";
 		}
@@ -788,7 +837,7 @@ void cognitiva_mac_impl::process_mac_frame(mpdu_struct mac_frame) {
 				!compare_address(mac_frame.dest_address,
 						broadcast_address.bytes()) // broadcast
 		) {
-			if (d_debug_level & 1)
+			if (d_debug_level & DEBUG_INFO)
 				std::cout << "Packet destined for this node\n";
 
 			// check mac version compatibility
@@ -801,7 +850,7 @@ void cognitiva_mac_impl::process_mac_frame(mpdu_struct mac_frame) {
 					if (mac_frame.sub_type == 0) {
 						// check if ACK is requested
 						if (mac_frame.use_ARQ) {
-							if (d_debug_level & 1)
+							if (d_debug_level & DEBUG_INFO)
 								std::cout << "ARQ requested\n";
 
 							// Create MAC frame for reply
@@ -811,10 +860,10 @@ void cognitiva_mac_impl::process_mac_frame(mpdu_struct mac_frame) {
 							// Send ACK
 							send_mpdu(mac_frame_reply);
 
-							if (d_debug_level & 1)
+							if (d_debug_level & DEBUG_INFO)
 								std::cout << "ACK sent " << std::endl;
 						} else {
-							if (d_debug_level & 1)
+							if (d_debug_level & DEBUG_VERBOSE)
 								std::cout << "No ARQ requested\n";
 						}
 
@@ -824,7 +873,7 @@ void cognitiva_mac_impl::process_mac_frame(mpdu_struct mac_frame) {
 						message_port_pub(pmt::mp("payload_out"),
 								pmt::cons(pmt::PMT_NIL, mac_payload));
 					} else {
-						if (d_debug_level & 1)
+						if (d_debug_level & DEBUG_VERBOSE)
 							std::cout << "Unrecognised data frame sub-type\n";
 					}
 				}
@@ -833,12 +882,13 @@ void cognitiva_mac_impl::process_mac_frame(mpdu_struct mac_frame) {
 					// ACK
 					if (mac_frame.sub_type == 0) {
 						if (arq_channel_state == ARQ_CHANNEL_IDLE) {
-							if (d_debug_level & 1)
+							if (d_debug_level & DEBUG_VERBOSE)
 								std::cout << "Received ACK while idle: "
 								<< received_seq_nr << std::endl;
 						} else {
 							if (expected_arq_id == received_seq_nr) {
 								msg_queue.pop_front();
+								succeeded_arq++;
 								arq_channel_state = ARQ_CHANNEL_IDLE;
 
 								struct timeval now;
@@ -848,12 +898,13 @@ void cognitiva_mac_impl::process_mac_frame(mpdu_struct mac_frame) {
 										- (time_of_tx.tv_sec
 												+ (time_of_tx.tv_usec / 1000000.0)));
 								//**
-								if (d_debug_level & 1)
+								if (d_debug_level & DEBUG_PERFORMANCE)
 									std::cout << "ACK " << expected_arq_id << " received, time taken: "
 									<< delay << std::endl;
+								print_arq_stats();
 							} else {
 								// Out of seuqence ACK, stop--and-wait ARQ implemented for now
-								if (d_debug_level & 1) {
+								if (d_debug_level & DEBUG_INFO) {
 									std::cout
 									<< "Received out of sequence ACK, expected "
 									<< expected_arq_id << "got "
@@ -868,7 +919,7 @@ void cognitiva_mac_impl::process_mac_frame(mpdu_struct mac_frame) {
 					// CTS
 					else if (mac_frame.sub_type == 2) {
 					} else {
-						if (d_debug_level & 1)
+						if (d_debug_level & DEBUG_VERBOSE)
 							std::cout
 							<< "Unrecognised control frame sub-type\n";
 					}
@@ -886,7 +937,7 @@ void cognitiva_mac_impl::process_mac_frame(mpdu_struct mac_frame) {
 						// Reply to discovery packet if it was send as broadcast packet
 						if(!compare_address(mac_frame.dest_address, broadcast_address.bytes()))
 						{
-							if (d_debug_level & 1)
+							if (d_debug_level & DEBUG_VERBOSE)
 								std::cout << "Broadcast DISCOVERY packet received from node : " << node.id.tobytestring() << ", " << node.id.tostring() << std::endl;
 
 							mpdu_struct mac_frame_discovery = create_mac_frame(NULL, 0, mac_src, received_seq_nr, 0, 2, 2, 0);
@@ -894,34 +945,34 @@ void cognitiva_mac_impl::process_mac_frame(mpdu_struct mac_frame) {
 							// Send discovery packet
 							send_mpdu(mac_frame_discovery);
 
-							if (d_debug_level & 1)
+							if (d_debug_level & DEBUG_VERBOSE)
 								std::cout << "Sent unicast DISCOVERY packet to node : " << node.id.tobytestring() << ", " << node.id.tostring() << std::endl;
 
 						}
 						else
 						{
-							if (d_debug_level & 1)
+							if (d_debug_level & DEBUG_VERBOSE)
 								std::cout << "Unicast DISCOVERY packet received from node : " << node.id.tobytestring() << ", " << node.id.tostring() << std::endl;
 						}
 					} else {
-						if (d_debug_level & 1)
+						if (d_debug_level & DEBUG_VERBOSE)
 							std::cout
 							<< "Unrecognised management frame sub-type\n";
 					}
 				} else {
-					if (d_debug_level & 1)
+					if (d_debug_level & DEBUG_VERBOSE)
 						std::cout << "MAC frame type unrecognised\n";
 				}
 			} else {
-				if (d_debug_level & 1)
+				if (d_debug_level & DEBUG_VERBOSE)
 					std::cout << "MAC version mismatch\n";
 			}
 		} else {
-			if (d_debug_level & 1)
+			if (d_debug_level & DEBUG_VERBOSE)
 				std::cout << "Packet destined for another node\n";
 		}
 	} else {
-		if (d_debug_level & 1)
+		if (d_debug_level & DEBUG_VERBOSE)
 			std::cout << "Received own packet\n";
 	}
 }
@@ -944,12 +995,20 @@ void cognitiva_mac_impl::check_nodes()
 				if (diff > node_expiry_delay)
 				{
 					it->second.expire();
-					if (d_debug_level & 1)
+					if (d_debug_level & DEBUG_VERBOSE)
 						std::cout<< "Node " << it->second.id.tobytestring() << ", " << it->second.id.tostring() << " disappeared\n";
 				}
 			}
 		}
 	}
+}
+
+/* 
+ * Helper function to print out ARQ stats
+ */
+void cognitiva_mac_impl::print_arq_stats() {
+	if (d_debug_level & DEBUG_PERFORMANCE)
+		std::cout << "ARQ stats " << local_address.tostring() << ", Packet count: " << arq_pkts_txed << ", Transmissions: " << total_arq << ", Success: " << succeeded_arq << ", Failed: " << failed_arq << ",  Retransmitted: " << arq_retxed << ", Oustanding: " << ((arq_channel_state == ARQ_CHANNEL_IDLE) ? 0 : 1) << std::endl;
 }
 
 /* 

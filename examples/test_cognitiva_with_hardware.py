@@ -1,11 +1,25 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 ##################################################
-# Gnuradio Python Flow Graph
+# GNU Radio Python Flow Graph
 # Title: Test Cognitiva With Hardware
-# Generated: Thu Nov  6 16:12:10 2014
+# Generated: Fri May 29 17:07:13 2015
 ##################################################
 
-execfile("/home/tchiwewe/.grc_gnuradio/cognitiva_phy.py")
+if __name__ == '__main__':
+    import ctypes
+    import sys
+    if sys.platform.startswith('linux'):
+        try:
+            x11 = ctypes.cdll.LoadLibrary('libX11.so')
+            x11.XInitThreads()
+        except:
+            print "Warning: failed to XInitThreads()"
+
+import os
+import sys
+sys.path.append(os.environ.get('GRC_HIER_PATH', os.path.expanduser('~/.grc_gnuradio')))
+
+from cognitiva_phy import cognitiva_phy
 from gnuradio import blocks
 from gnuradio import eng_notation
 from gnuradio import gr
@@ -61,12 +75,12 @@ class test_cognitiva_with_hardware(grc_wxgui.top_block_gui):
         self.uhd_usrp_sink_0.set_gain(0, 0)
         self.uhd_usrp_sink_0.set_antenna("TX/RX", 0)
         self.cognitiva_phy_0 = cognitiva_phy(
-            phy_ver=phy_ver,
-            samp_rate=samp_rate,
-            parameter_fft_size=1024,
             debug_mask=0,
             parameter_dwell_delay=0.001,
+            parameter_fft_size=1024,
             parameter_tune_delay=0.1,
+            phy_ver=phy_ver,
+            samp_rate=samp_rate,
         )
         self.cognitiva_cognitiva_mac_0 = cognitiva.cognitiva_mac(
           "::1020", 
@@ -88,18 +102,14 @@ class test_cognitiva_with_hardware(grc_wxgui.top_block_gui):
         ##################################################
         # Connections
         ##################################################
-        self.connect((self.cognitiva_phy_0, 0), (self.uhd_usrp_sink_0, 0))
-        self.connect((self.uhd_usrp_source_0, 0), (self.cognitiva_phy_0, 0))
-
-        ##################################################
-        # Asynch Message Connections
-        ##################################################
-        self.msg_connect(self.cognitiva_cognitiva_mac_0, "payload_out", self.blocks_socket_pdu_0, "pdus")
-        self.msg_connect(self.blocks_socket_pdu_0, "pdus", self.cognitiva_cognitiva_mac_0, "payload_in")
-        self.msg_connect(self.cognitiva_phy_0, "control_out", self.cognitiva_cognitiva_mac_0, "control_in")
-        self.msg_connect(self.cognitiva_cognitiva_mac_0, "control_out", self.cognitiva_phy_0, "control_in")
-        self.msg_connect(self.cognitiva_cognitiva_mac_0, "mpdu_out", self.cognitiva_phy_0, "psdu_in")
-        self.msg_connect(self.cognitiva_phy_0, "psdu_out", self.cognitiva_cognitiva_mac_0, "mpdu_in")
+        self.msg_connect((self.blocks_socket_pdu_0, 'pdus'), (self.cognitiva_cognitiva_mac_0, 'payload_in'))    
+        self.msg_connect((self.cognitiva_cognitiva_mac_0, 'payload_out'), (self.blocks_socket_pdu_0, 'pdus'))    
+        self.msg_connect((self.cognitiva_cognitiva_mac_0, 'control_out'), (self.cognitiva_phy_0, 'control_in'))    
+        self.msg_connect((self.cognitiva_cognitiva_mac_0, 'mpdu_out'), (self.cognitiva_phy_0, 'psdu_in'))    
+        self.msg_connect((self.cognitiva_phy_0, 'control_out'), (self.cognitiva_cognitiva_mac_0, 'control_in'))    
+        self.msg_connect((self.cognitiva_phy_0, 'psdu_out'), (self.cognitiva_cognitiva_mac_0, 'mpdu_in'))    
+        self.connect((self.cognitiva_phy_0, 0), (self.uhd_usrp_sink_0, 0))    
+        self.connect((self.uhd_usrp_source_0, 0), (self.cognitiva_phy_0, 0))    
 
 
     def get_address(self):
@@ -113,8 +123,8 @@ class test_cognitiva_with_hardware(grc_wxgui.top_block_gui):
 
     def set_param_freq(self, param_freq):
         self.param_freq = param_freq
-        self.uhd_usrp_source_0.set_center_freq(self.param_freq, 0)
         self.uhd_usrp_sink_0.set_center_freq(self.param_freq, 0)
+        self.uhd_usrp_source_0.set_center_freq(self.param_freq, 0)
 
     def get_samp_rate(self):
         return self.samp_rate
@@ -122,8 +132,8 @@ class test_cognitiva_with_hardware(grc_wxgui.top_block_gui):
     def set_samp_rate(self, samp_rate):
         self.samp_rate = samp_rate
         self.cognitiva_phy_0.set_samp_rate(self.samp_rate)
-        self.uhd_usrp_source_0.set_samp_rate(self.samp_rate)
         self.uhd_usrp_sink_0.set_samp_rate(self.samp_rate)
+        self.uhd_usrp_source_0.set_samp_rate(self.samp_rate)
 
     def get_phy_ver(self):
         return self.phy_ver
@@ -132,15 +142,8 @@ class test_cognitiva_with_hardware(grc_wxgui.top_block_gui):
         self.phy_ver = phy_ver
         self.cognitiva_phy_0.set_phy_ver(self.phy_ver)
 
+
 if __name__ == '__main__':
-    import ctypes
-    import sys
-    if sys.platform.startswith('linux'):
-        try:
-            x11 = ctypes.cdll.LoadLibrary('libX11.so')
-            x11.XInitThreads()
-        except:
-            print "Warning: failed to XInitThreads()"
     parser = OptionParser(option_class=eng_option, usage="%prog: [options]")
     parser.add_option("-a", "--address", dest="address", type="string", default="name=b100a",
         help="Set Device Address [default=%default]")

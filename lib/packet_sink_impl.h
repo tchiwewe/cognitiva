@@ -41,7 +41,7 @@ private:
 	} d_state;
 	//**
 	static const int MAX_PKT_LEN = MAX_PACKET_SIZE - 10; // remove header
-	static const int MAX_LQI_SAMPLES = 8; // Number of chip correlation samples to take
+	static const int MAX_LQI_SAMPLES = 12; // Number of chip correlation samples to take
 
 	unsigned int d_sync_vector;    // Cognitiva standard is 6x 0 bytes and 1x 0xF3A0
 	unsigned int d_threshold;      // how many bits may be wrong in sync vector

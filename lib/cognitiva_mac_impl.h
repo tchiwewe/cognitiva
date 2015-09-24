@@ -156,6 +156,7 @@ private:
 
 	// Helper
 	void print_mac_frame(mpdu_struct mac_frame);
+	void print_arq_stats();
 
 	// ARQ	
 	bool use_arq;
@@ -163,6 +164,8 @@ private:
 	uint16_t arq_pkts_txed;             //how many arq packets we've transmitted
 	uint16_t arq_retxed;                    //how many times we've retransmitted
 	uint16_t failed_arq;
+	uint16_t succeeded_arq;
+	uint16_t total_arq;
 	uint16_t max_attempts;
 	uint16_t retries;
 	float timeout;                            //arq timeout parameter

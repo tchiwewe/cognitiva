@@ -24,6 +24,7 @@
 
 #include <gnuradio/io_signature.h>
 #include "cognitiva_phy_ppdu_impl.h"
+#include "debug_utils.h"
 
 #include <bitset>
 
@@ -65,7 +66,7 @@ void cognitiva_phy_ppdu_impl::make_ppdu(pmt::pmt_t msg) {
 
 	size_t data_len = pmt::blob_length(blob);
 
-	if (d_debug_level & 1)
+	if (d_debug_level & DEBUG_VERBOSE)
 		std::cout << "PHY message received, len: " << data_len << std::endl;
 
 	assert(data_len);
